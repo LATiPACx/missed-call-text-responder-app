@@ -1,0 +1,43 @@
+{
+  "businessName": "SongSecure",
+  "description": "SongSecure helps musicians protect their music with affordable copyright options.",
+  "features": [
+    "Fast and secure copyright registration",
+    "Affordable plans for musicians",
+    "Protection for unlimited songs",
+    "Free revisions and updates"
+  ],
+  "faqs": [
+    {
+      "question": "How does SongSecure protect my music?",
+      "answer": "SongSecure registers your music with copyright protections to ensure your work is legally protected."
+    },
+    {
+      "question": "What types of files are supported?",
+      "answer": "We support MP3, WAV, and other common audio formats."
+    },
+    {
+      "question": "Can I update my submission?",
+      "answer": "Yes, you can submit revisions for free at any time."
+    },
+    {
+      "question": "How much does it cost?",
+      "answer": "We offer a variety of plans starting at $9.99 per month."
+    }
+  ],
+  "support": {
+    "contactEmail": "support@songsecure.com",
+    "phone": "+1-800-555-1234",
+    "hours": "Monday - Friday, 9 AM to 5 PM EST"
+  },
+  "testimonials": [
+    {
+      "name": "John D.",
+      "comment": "SongSecure made protecting my music so easy and affordable!"
+    },
+    {
+      "name": "Maria S.",
+      "comment": "I love how fast I was able to secure my new album!"
+    }
+  ]
+}

@@ -1,73 +1,95 @@
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const twilio = require("twilio");
-const express = require("express");
-const bodyParser = require("body-parser");
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+const OpenAI = require('openai');
+const twilio = require('twilio');
 
-// Initialize Firebase Admin SDK
+// Initialize Firebase Admin
 admin.initializeApp();
 
-const app = express();
-app.use(bodyParser.urlencoded({ extended: false })); // Parse Twilio webhook data
-
-// Twilio credentials
-const TWILIO_ACCOUNT_SID = "AC0998c199cfae9324ff1494228d111532"; // Replace with your actual SID
-const TWILIO_AUTH_TOKEN = "da7356e28e1fd035583dbb8b9e7ba739"; // Replace with your actual Auth Token
-const TWILIO_PHONE_NUMBER = "+15125153550"; // Replace with your Twilio phone number
-
-// Debugging: Log the credentials
-console.log("DEBUG: TWILIO_ACCOUNT_SID:", TWILIO_ACCOUNT_SID);
-console.log("DEBUG: TWILIO_AUTH_TOKEN:", TWILIO_AUTH_TOKEN);
-console.log("DEBUG: TWILIO_PHONE_NUMBER:", TWILIO_PHONE_NUMBER);
+// Initialize OpenAI with the latest SDK syntax
+const openai = new OpenAI({
+  apiKey: "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"
+});
 
 // Initialize Twilio client
-let client;
-try {
-  client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-  console.log("DEBUG: Twilio client initialized successfully");
-} catch (error) {
-  console.error("ERROR: Failed to initialize Twilio client:", error.message);
-}
+const twilioClient = twilio(
+  "AC0998c199cfae9324ff1494228d111532", // Twilio Account SID
+  "da7356e28e1fd035583dbb8b9e7ba739" // Twilio Auth Token
+);
 
-// Firestore database reference
-const db = admin.firestore();
+// Load business data
+const businessData = require('./songsecure_data.json');
 
-// Webhook to handle missed calls
-app.post("/webhook/missed_call", async (req, res) => {
-  const callStatus = req.body.CallStatus;
-  const callerNumber = req.body.From;
+exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
+  // Log the incoming payload for debugging
+  console.log('DEBUG: Incoming payload:', JSON.stringify(req.body, null, 2));
 
-  console.log(`DEBUG: Incoming call from ${callerNumber} with status: ${callStatus}`);
+  try {
+    const { MessageSid, From, Body } = req.body;
 
-  if (callStatus === "missed") {
-    try {
-      // Log missed call in Firestore
-      await db.collection("missed_calls").add({
-        number: callerNumber,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      console.log("DEBUG: Missed call logged in Firestore");
-
-      // Send SMS to the missed caller
-      await client.messages.create({
-        body: "Hi, sorry we missed your call! How can we assist you? Please reply to this message for help.",
-        from: TWILIO_PHONE_NUMBER,
-        to: callerNumber,
-      });
-
-      console.log("DEBUG: SMS sent successfully to", callerNumber);
-
-      res.status(200).send("Missed call handled");
-    } catch (error) {
-      console.error("ERROR: Handling missed call failed:", error);
-      res.status(500).send("Error handling missed call");
+    if (!From) {
+      throw new Error('Invalid request: Missing "From" phone number.');
     }
-  } else {
-    console.log("DEBUG: Call was not missed, no action taken");
-    res.status(200).send("Call not missed");
+
+    // Log the incoming message or missed call
+    if (MessageSid && Body) {
+      console.log(`DEBUG: Received SMS from ${From}: ${Body}`);
+      await handleIncomingSmsEvent(From, Body);
+    } else {
+      console.log(`DEBUG: Received event, but no message body detected.`);
+    }
+
+    res.status(200).json({ status: 'success' });
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
-// Export as Firebase function
-exports.api = functions.https.onRequest(app);
+async function handleIncomingSmsEvent(phoneNumber, userMessage) {
+  try {
+    // Log the incoming SMS to Firestore
+    await admin.firestore().collection('smsMessages').add({
+      phoneNumber,
+      message: userMessage,
+      timestamp: new Date().toISOString(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Generate and send AI response to the SMS
+    const aiResponse = await generateAiResponse(phoneNumber, userMessage);
+
+    // Send the response via Twilio
+    await twilioClient.messages.create({
+      body: aiResponse,
+      to: phoneNumber, // Respond to the sender
+      from: "+15125153550" // Twilio Phone Number
+    });
+
+    console.log(`DEBUG: AI response sent successfully to ${phoneNumber}`);
+  } catch (error) {
+    console.error('Error handling incoming SMS:', error);
+  }
+}
+
+async function generateAiResponse(phoneNumber, userMessage) {
+  const systemPrompt = `You are a helpful assistant for ${businessData.businessName}. 
+  Use the following FAQs and business information to provide relevant responses: 
+  ${JSON.stringify(businessData)}`;
+
+  const userPrompt = `Generate a helpful response to this customer message: "${userMessage}"
+  Keep the response concise and professional.`;
+
+  // Generate AI response
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ],
+    max_tokens: 150,
+    temperature: 0.7
+  });
+
+  return completion.choices[0].message.content;
+}
