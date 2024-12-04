@@ -37,7 +37,7 @@ exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
 
     if (MessageSid && Body) {
       console.log(`DEBUG: Received SMS from ${From}: ${Body}`);
-      await handleIncomingSmsEvent(From, Body);
+      await handleIncomingSmsEvent(From, Body, MessageSid);
     } else {
       console.log(`DEBUG: Received event, but no message body detected.`);
     }
@@ -73,16 +73,48 @@ async function handleMissedCallWithConsent(phoneNumber) {
   }
 }
 
-async function handleIncomingSmsEvent(phoneNumber, userMessage) {
+async function handleIncomingSmsEvent(phoneNumber, userMessage, messageId) {
   try {
+    // Check if we've already processed this message
+    const processedRef = admin.firestore().collection('processedMessages').doc(messageId);
+    const processedDoc = await processedRef.get();
+
+    if (processedDoc.exists) {
+      console.log(`DEBUG: Message ${messageId} already processed, skipping`);
+      return;
+    }
+
+    // Add message to processed collection first
+    await processedRef.set({
+      phoneNumber,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      processed: true
+    });
+
+    // Log the incoming message
     await admin.firestore().collection('smsMessages').add({
       phoneNumber,
       message: userMessage,
+      messageId,
       timestamp: new Date().toISOString(),
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
     const aiResponse = await generateAiResponse(phoneNumber, userMessage);
+    
+    // Calculate delay based on message length
+    const charCount = aiResponse.length;
+    const baseTypingTime = (charCount / 200) * 60 * 1000; // Convert to milliseconds
+    const thinkingTime = Math.random() * 2000 + 1000;     // 1-3 seconds thinking time
+    const variability = (Math.random() * 0.4 + 0.8);      // 80-120% of base typing time
+    const totalDelay = Math.floor(thinkingTime + (baseTypingTime * variability));
+    
+    // Add a maximum cap to avoid too long delays
+    const maxDelay = 20000; // Maximum 20 seconds
+    const delay = Math.min(totalDelay, maxDelay);
+
+    console.log(`DEBUG: Message length ${charCount}, waiting ${delay}ms before sending`);
+    await new Promise(resolve => setTimeout(resolve, delay));
 
     await twilioClient.messages.create({
       body: aiResponse,
