@@ -51,10 +51,30 @@ exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
 
 async function handleMissedCallWithConsent(phoneNumber) {
   try {
+    // Create a unique ID for this missed call using timestamp and phone number
+    const callId = `${phoneNumber}-${Date.now()}`;
+    
+    // Check if we've already processed this call
+    const processedRef = admin.firestore().collection('processedCalls').doc(callId);
+    const processedDoc = await processedRef.get();
+
+    if (processedDoc.exists) {
+      console.log(`DEBUG: Call ${callId} already processed, skipping`);
+      return;
+    }
+
+    // Add call to processed collection first
+    await processedRef.set({
+      phoneNumber,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      processed: true
+    });
+
     const message = await generateAiResponse(phoneNumber, 'MISSED_CALL');
     
     await admin.firestore().collection('missedCalls').add({
       phoneNumber,
+      callId,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       response: message,
       consent: true
