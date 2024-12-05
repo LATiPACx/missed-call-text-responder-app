@@ -31,8 +31,25 @@ exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
 
     if (Digits === '1') {
       console.log(`DEBUG: Received keypress 1 from ${From}`);
-      await handleMissedCallWithConsent(From);
-      return res.status(200).json({ status: 'success' });
+      
+      // First, send the voice response
+      res.type('text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+          <Say voice="alice">Thanks, you will receive a text message from us within a couple minutes.</Say>
+          <Hangup/>
+        </Response>`);
+
+      try {
+        // Process the missed call consent asynchronously without waiting
+        handleMissedCallWithConsent(From).catch(error => {
+          console.error('Error in async missed call handling:', error);
+        });
+      } catch (error) {
+        console.error('Error initiating missed call handling:', error);
+        // Don't throw here - we already sent the voice response
+      }
+      return;
     }
 
     if (MessageSid && Body) {
@@ -45,7 +62,17 @@ exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
     res.status(200).json({ status: 'success' });
   } catch (error) {
     console.error('Error processing request:', error);
-    res.status(500).json({ status: 'error', message: error.message });
+    // Send a generic TwiML response for voice calls that error
+    if (req.body.CallSid) {
+      res.type('text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+          <Say voice="alice">Thanks, you will receive a text message from us within a couple minutes.</Say>
+          <Hangup/>
+        </Response>`);
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
