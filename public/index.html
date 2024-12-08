@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Business Manager Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center">Business Manager Login</h2>
+            <button onclick="signIn()" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                Sign in with Google
+            </button>
+        </div>
+    </div>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDwHRcJnal2jqMFzYLJNBlhfXfe9bkKN7o",
+            authDomain: "missed-call-text-responder-app.firebaseapp.com",
+            projectId: "missed-call-text-responder-app",
+            storageBucket: "missed-call-text-responder-app.firebasestorage.app",
+            messagingSenderId: "471274821063",
+            appId: "1:471274821063:web:a2e250113845118be775e2",
+            measurementId: "G-Z7GC8Y1YK7"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+
+        firebase.app().auth()
+            .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            .catch(error => {
+                console.error("Firebase Auth Error:", error);
+            });
+
+        firebase.auth().onAuthStateChanged((user) => {
+            console.log('Auth state changed:', user);
+        });
+
+        function signIn() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebase.auth().signInWithPopup(provider)
+                .then((result) => {
+                    console.log('Sign-in successful:', result);
+                    window.location.href = '/dashboard.html';
+                })
+                .catch((error) => {
+                    console.error('Sign-in error:', error.code, error.message);
+                    alert(error.message);
+                });
+        }
+    </script>
+</body>
+</html>
