@@ -1,24 +1,29 @@
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Box, CssBaseline } from '@mui/material';
+import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
+import Dashboard from './pages/Dashboard';
+import Businesses from './pages/Businesses';
+import CallLogs from './pages/CallLogs';
+import Settings from './pages/Settings';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>
+      <Box sx={{ display: 'flex' }}>
+        <CssBaseline />
+        <Navbar />
+        <Sidebar />
+        <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/businesses" element={<Businesses />} />
+            <Route path="/calls" element={<CallLogs />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Box>
+      </Box>
+    </BrowserRouter>
   );
 }
 
