@@ -15,7 +15,6 @@ const twilioClient = twilio(accountSid, authToken);
 
 const businessData = require('./songsecure_data.json');
 
-// Helper function to get business ID
 async function getBusinessId() {
  const businessesRef = admin.firestore().collection('businesses');
  const snapshot = await businessesRef.where('phone', '==', '+15129655650').get();
@@ -107,6 +106,17 @@ async function handleMissedCallWithConsent(phoneNumber) {
      consent: true
    });
 
+   // Store initial AI message
+   await admin.firestore().collection('smsMessages').add({
+     phoneNumber,
+     message: message,
+     messageId: `ai-${Date.now()}`,
+     businessId,
+     sender: 'ai',
+     timestamp: new Date().toISOString(),
+     createdAt: admin.firestore.FieldValue.serverTimestamp()
+   });
+
    await twilioClient.messages.create({
      body: message,
      to: phoneNumber,
@@ -138,17 +148,30 @@ async function handleIncomingSmsEvent(phoneNumber, userMessage, messageId) {
 
    const businessId = await getBusinessId();
 
+   // Store user message
    await admin.firestore().collection('smsMessages').add({
      phoneNumber,
      message: userMessage,
      messageId,
      businessId,
+     sender: 'user',
      timestamp: new Date().toISOString(),
      createdAt: admin.firestore.FieldValue.serverTimestamp()
    });
 
    const aiResponse = await generateAiResponse(phoneNumber, userMessage);
    
+   // Store AI response
+   await admin.firestore().collection('smsMessages').add({
+     phoneNumber,
+     message: aiResponse,
+     messageId: `ai-${Date.now()}`,
+     businessId,
+     sender: 'ai',
+     timestamp: new Date().toISOString(),
+     createdAt: admin.firestore.FieldValue.serverTimestamp()
+   });
+
    const charCount = aiResponse.length;
    const baseTypingTime = (charCount / 200) * 60 * 1000;
    const thinkingTime = Math.random() * 2000 + 1000;
