@@ -1,22 +1,32 @@
 // src/pages/Businesses.js
-
 import { useState, useEffect } from 'react';
 import { 
  Box, Typography, Paper, Button, Grid, Table, 
  TableBody, TableCell, TableContainer, TableHead, 
  TableRow, Dialog, DialogTitle, DialogContent,
- DialogActions, TextField, IconButton
+ DialogActions, TextField, IconButton, Tabs, Tab
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
+import ConversationView from '../components/ConversationView';
+
+function TabPanel({ children, value, index }) {
+ return (
+   <div hidden={value !== index}>
+     {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+   </div>
+ );
+}
 
 export default function Businesses() {
  const [businesses, setBusinesses] = useState([]);
- const [open, setOpen] = useState(false);
- const [editBusiness, setEditBusiness] = useState(null);
+ const [selectedBusiness, setSelectedBusiness] = useState(null);
+ const [tabValue, setTabValue] = useState(0);
+ const [conversations, setConversations] = useState([]);
+ const [formOpen, setFormOpen] = useState(false);
  const [formData, setFormData] = useState({
    name: '',
    phone: '',
@@ -31,6 +41,12 @@ export default function Businesses() {
    fetchBusinesses();
  }, []);
 
+ useEffect(() => {
+   if (selectedBusiness) {
+     fetchConversations(selectedBusiness.id);
+   }
+ }, [selectedBusiness]);
+
  async function fetchBusinesses() {
    const querySnapshot = await getDocs(collection(db, 'businesses'));
    setBusinesses(querySnapshot.docs.map(doc => ({
@@ -39,12 +55,25 @@ export default function Businesses() {
    })));
  }
 
- const handleOpen = (business = null) => {
+ async function fetchConversations(businessId) {
+   const q = query(
+     collection(db, 'smsMessages'),
+     where('businessId', '==', businessId)
+   );
+   const snapshot = await getDocs(q);
+   const phoneNumbers = [...new Set(snapshot.docs.map(doc => doc.data().phoneNumber))];
+   setConversations(phoneNumbers);
+ }
+
+ const handleBusinessClick = (business) => {
+   setSelectedBusiness(business);
+   setTabValue(0);
+ };
+
+ const handleFormOpen = (business = null) => {
    if (business) {
-     setEditBusiness(business);
      setFormData(business);
    } else {
-     setEditBusiness(null);
      setFormData({
        name: '',
        phone: '',
@@ -55,19 +84,18 @@ export default function Businesses() {
        }
      });
    }
-   setOpen(true);
+   setFormOpen(true);
  };
 
- const handleClose = () => {
-   setOpen(false);
-   setEditBusiness(null);
+ const handleFormClose = () => {
+   setFormOpen(false);
  };
 
  const handleSubmit = async (e) => {
    e.preventDefault();
    try {
-     if (editBusiness) {
-       await updateDoc(doc(db, 'businesses', editBusiness.id), formData);
+     if (formData.id) {
+       await updateDoc(doc(db, 'businesses', formData.id), formData);
      } else {
        await addDoc(collection(db, 'businesses'), {
          ...formData,
@@ -75,7 +103,7 @@ export default function Businesses() {
        });
      }
      fetchBusinesses();
-     handleClose();
+     handleFormClose();
    } catch (error) {
      console.error('Error saving business:', error);
    }
@@ -86,6 +114,9 @@ export default function Businesses() {
      try {
        await deleteDoc(doc(db, 'businesses', id));
        fetchBusinesses();
+       if (selectedBusiness?.id === id) {
+         setSelectedBusiness(null);
+       }
      } catch (error) {
        console.error('Error deleting business:', error);
      }
@@ -99,44 +130,109 @@ export default function Businesses() {
        <Button 
          variant="contained" 
          startIcon={<AddIcon />}
-         onClick={() => handleOpen()}
+         onClick={() => handleFormOpen()}
        >
          Add Business
        </Button>
      </Box>
 
-     <TableContainer component={Paper}>
-       <Table>
-         <TableHead>
-           <TableRow>
-             <TableCell>Name</TableCell>
-             <TableCell>Phone</TableCell>
-             <TableCell>Email</TableCell>
-             <TableCell>Actions</TableCell>
-           </TableRow>
-         </TableHead>
-         <TableBody>
-           {businesses.map((business) => (
-             <TableRow key={business.id}>
-               <TableCell>{business.name}</TableCell>
-               <TableCell>{business.phone}</TableCell>
-               <TableCell>{business.email}</TableCell>
-               <TableCell>
-                 <IconButton onClick={() => handleOpen(business)}>
-                   <EditIcon />
-                 </IconButton>
-                 <IconButton onClick={() => handleDelete(business.id)}>
-                   <DeleteIcon />
-                 </IconButton>
-               </TableCell>
-             </TableRow>
-           ))}
-         </TableBody>
-       </Table>
-     </TableContainer>
+     <Grid container spacing={3}>
+       <Grid item xs={12} md={4}>
+         <TableContainer component={Paper}>
+           <Table>
+             <TableHead>
+               <TableRow>
+                 <TableCell>Name</TableCell>
+                 <TableCell>Actions</TableCell>
+               </TableRow>
+             </TableHead>
+             <TableBody>
+               {businesses.map((business) => (
+                 <TableRow 
+                   key={business.id}
+                   onClick={() => handleBusinessClick(business)}
+                   sx={{ 
+                     cursor: 'pointer',
+                     backgroundColor: selectedBusiness?.id === business.id ? '#f5f5f5' : 'inherit',
+                     '&:hover': {
+                       backgroundColor: '#f5f5f5'
+                     }
+                   }}
+                 >
+                   <TableCell>{business.name}</TableCell>
+                   <TableCell>
+                     <IconButton onClick={(e) => {
+                       e.stopPropagation();
+                       handleFormOpen(business);
+                     }}>
+                       <EditIcon />
+                     </IconButton>
+                     <IconButton onClick={(e) => {
+                       e.stopPropagation();
+                       handleDelete(business.id);
+                     }}>
+                       <DeleteIcon />
+                     </IconButton>
+                   </TableCell>
+                 </TableRow>
+               ))}
+             </TableBody>
+           </Table>
+         </TableContainer>
+       </Grid>
 
-     <Dialog open={open} onClose={handleClose}>
-       <DialogTitle>{editBusiness ? 'Edit Business' : 'Add Business'}</DialogTitle>
+       <Grid item xs={12} md={8}>
+         {selectedBusiness ? (
+           <Paper>
+             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+               <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
+                 <Tab label="Details" />
+                 <Tab label="Conversations" />
+                 <Tab label="Call Logs" />
+               </Tabs>
+             </Box>
+
+             <TabPanel value={tabValue} index={0}>
+               <Typography variant="h6" gutterBottom>{selectedBusiness.name}</Typography>
+               <Typography>Phone: {selectedBusiness.phone}</Typography>
+               <Typography>Email: {selectedBusiness.email}</Typography>
+             </TabPanel>
+
+             <TabPanel value={tabValue} index={1}>
+               <Typography variant="h6" gutterBottom>SMS Conversations</Typography>
+               {conversations.length > 0 ? (
+                 conversations.map((phoneNumber) => (
+                   <Button
+                     key={phoneNumber}
+                     variant="outlined"
+                     sx={{ display: 'block', mb: 2, width: '100%', textAlign: 'left' }}
+                     onClick={() => setSelectedBusiness({ ...selectedBusiness, selectedPhone: phoneNumber })}
+                   >
+                     {phoneNumber}
+                   </Button>
+                 ))
+               ) : (
+                 <Typography color="textSecondary">No conversations yet</Typography>
+               )}
+             </TabPanel>
+
+             <TabPanel value={tabValue} index={2}>
+               <Typography variant="h6" gutterBottom>Call History</Typography>
+               <Typography color="textSecondary">Call logs feature coming soon</Typography>
+             </TabPanel>
+           </Paper>
+         ) : (
+           <Paper sx={{ p: 3 }}>
+             <Typography color="textSecondary">
+               Select a business to view details
+             </Typography>
+           </Paper>
+         )}
+       </Grid>
+     </Grid>
+
+     <Dialog open={formOpen} onClose={handleFormClose} maxWidth="sm" fullWidth>
+       <DialogTitle>{formData.id ? 'Edit Business' : 'Add Business'}</DialogTitle>
        <DialogContent>
          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
            <TextField
@@ -178,12 +274,29 @@ export default function Businesses() {
          </Box>
        </DialogContent>
        <DialogActions>
-         <Button onClick={handleClose}>Cancel</Button>
+         <Button onClick={handleFormClose}>Cancel</Button>
          <Button onClick={handleSubmit} variant="contained">
-           {editBusiness ? 'Update' : 'Add'}
+           {formData.id ? 'Update' : 'Add'}
          </Button>
        </DialogActions>
      </Dialog>
+
+     {selectedBusiness?.selectedPhone && (
+       <Dialog 
+         open={true} 
+         onClose={() => setSelectedBusiness({ ...selectedBusiness, selectedPhone: null })}
+         maxWidth="md"
+         fullWidth
+       >
+         <DialogTitle>Conversation with {selectedBusiness.selectedPhone}</DialogTitle>
+         <DialogContent>
+           <ConversationView
+             businessId={selectedBusiness.id}
+             phoneNumber={selectedBusiness.selectedPhone}
+           />
+         </DialogContent>
+       </Dialog>
+     )}
    </Box>
  );
 }
