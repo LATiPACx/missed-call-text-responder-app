@@ -1,14 +1,49 @@
 import React, { useState, useEffect } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import songSecureData from '../songsecure_data.json';
 
-export default function BusinessAISettings({ businessName }) {
+export default function BusinessAISettings({ businessName, businessId }) {
  const [info, setInfo] = useState('');
  
  useEffect(() => {
-   if (businessName === 'SongSecure') {
-     setInfo(JSON.stringify(songSecureData, null, 2));
+   loadBusinessInfo();
+ }, [businessId]);
+
+ async function loadBusinessInfo() {
+   if (businessId) {
+     try {
+       const docRef = doc(db, 'businessInfo', businessId);
+       const docSnap = await getDoc(docRef);
+       
+       if (docSnap.exists()) {
+         setInfo(JSON.stringify(docSnap.data().businessData, null, 2));
+       } else {
+         // Initialize with default data for SongSecure
+         if (businessName === 'SongSecure') {
+           setInfo(JSON.stringify(songSecureData, null, 2));
+         }
+       }
+     } catch (error) {
+       console.error('Error loading business info:', error);
+     }
    }
- }, [businessName]);
+ }
+
+ async function saveBusinessInfo() {
+   if (businessId) {
+     try {
+       const docRef = doc(db, 'businessInfo', businessId);
+       await setDoc(docRef, {
+         businessData: JSON.parse(info),
+         lastUpdated: new Date()
+       });
+       console.log('Business info saved successfully');
+     } catch (error) {
+       console.error('Error saving business info:', error);
+     }
+   }
+ }
 
  const containerStyle = {
    display: 'flex',
@@ -47,7 +82,7 @@ export default function BusinessAISettings({ businessName }) {
      />
      <button 
        style={buttonStyle}
-       onClick={() => console.log('Save clicked:', info)}
+       onClick={saveBusinessInfo}
      >
        Save Changes
      </button>
