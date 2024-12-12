@@ -200,7 +200,7 @@ return (
             </TabPanel>
 
             <TabPanel value={tabValue} index={1}>
-              <BusinessAISettings />
+              <BusinessAISettings businessName={selectedBusiness.name} />
             </TabPanel>
 
             <TabPanel value={tabValue} index={2}>
