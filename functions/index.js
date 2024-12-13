@@ -13,8 +13,6 @@ const accountSid = "AC0998c199cfae9324ff1494228d111532";
 const authToken = "da7356e28e1fd035583dbb8b9e7ba739";
 const twilioClient = twilio(accountSid, authToken);
 
-const businessData = require('./songsecure_data.json');
-
 async function getBusinessId() {
  const businessesRef = admin.firestore().collection('businesses');
  const snapshot = await businessesRef.where('phone', '==', '+15129655650').get();
@@ -22,6 +20,35 @@ async function getBusinessId() {
    return snapshot.docs[0].id;
  }
  return null;
+}
+
+async function getBusinessInfo(businessId) {
+ try {
+   const docRef = admin.firestore().collection('businessInfo').doc(businessId);
+   const doc = await docRef.get();
+   if (doc.exists) {
+     return doc.data().businessData;
+   }
+   console.log('No business info found for ID:', businessId);
+   return null;
+ } catch (error) {
+   console.error('Error fetching business info:', error);
+   return null;
+ }
+}
+
+async function getBusinessName(businessId) {
+ try {
+   const docRef = admin.firestore().collection('businesses').doc(businessId);
+   const doc = await docRef.get();
+   if (doc.exists) {
+     return doc.data().name;
+   }
+   return null;
+ } catch (error) {
+   console.error('Error fetching business name:', error);
+   return null;
+ }
 }
 
 exports.handleMissedCall = functions.https.onRequest(async (req, res) => {
@@ -95,7 +122,7 @@ async function handleMissedCallWithConsent(phoneNumber) {
    });
 
    const businessId = await getBusinessId();
-   const message = await generateAiResponse(phoneNumber, 'MISSED_CALL');
+   const message = await generateAiResponse(businessId, 'MISSED_CALL');
    
    await admin.firestore().collection('missedCalls').add({
      phoneNumber,
@@ -106,7 +133,6 @@ async function handleMissedCallWithConsent(phoneNumber) {
      consent: true
    });
 
-   // Store initial AI message
    await admin.firestore().collection('smsMessages').add({
      phoneNumber,
      message: message,
@@ -147,8 +173,8 @@ async function handleIncomingSmsEvent(phoneNumber, userMessage, messageId) {
    });
 
    const businessId = await getBusinessId();
+   console.log('Debug - Retrieved businessId:', businessId);
 
-   // Store user message
    await admin.firestore().collection('smsMessages').add({
      phoneNumber,
      message: userMessage,
@@ -159,9 +185,9 @@ async function handleIncomingSmsEvent(phoneNumber, userMessage, messageId) {
      createdAt: admin.firestore.FieldValue.serverTimestamp()
    });
 
-   const aiResponse = await generateAiResponse(phoneNumber, userMessage);
+   const aiResponse = await generateAiResponse(businessId, userMessage);
+   console.log('Debug - Generated AI response:', aiResponse);
    
-   // Store AI response
    await admin.firestore().collection('smsMessages').add({
      phoneNumber,
      message: aiResponse,
@@ -195,35 +221,55 @@ async function handleIncomingSmsEvent(phoneNumber, userMessage, messageId) {
  }
 }
 
-async function generateAiResponse(phoneNumber, userMessage) {
- if (userMessage === 'MISSED_CALL') {
-   return "Hey, sorry we missed your call here at SongSecure. How can I help you?";
+async function generateAiResponse(businessId, userMessage) {
+ console.log('Debug - Starting generateAiResponse with:', { businessId, userMessage });
+ 
+ const businessInfo = await getBusinessInfo(businessId);
+ console.log('Debug - Retrieved businessInfo:', businessInfo);
+ 
+ const businessName = await getBusinessName(businessId);
+ console.log('Debug - Retrieved businessName:', businessName);
+
+ if (!businessInfo || !businessName) {
+   console.error('Missing business info or name:', { businessInfo, businessName });
+   return "I apologize, but I'm having trouble accessing the business information. Please try again later.";
  }
 
- const systemPrompt = `You are a helpful assistant for SongSecure. Your communication style should be:
-- Direct and natural - avoid repetitive sales language
-- Honest and transparent
-- Focus on answering the actual question asked
-- Vary your responses and language
-- If someone asks if you're a bot, be honest but focus on how you can help
-Use this business information only when relevant: ${JSON.stringify(businessData)}`;
+ if (userMessage === 'MISSED_CALL') {
+   return `Hey, sorry we missed your call here at ${businessName}. How can I help you?`;
+ }
 
- const userPrompt = `Respond naturally to: "${userMessage}"
-- Address the actual question or concern raised
-- Don't repeat previous points
-- Be direct and honest
-- Keep responses concise
-- If they're skeptical, acknowledge it and focus on being helpful`;
+ try {
+   const systemPrompt = `You are a helpful assistant for ${businessName}. Your communication style should be:
+   - Direct and natural - avoid repetitive sales language
+   - Honest and transparent
+   - Focus on answering the actual question asked
+   - Vary your responses and language
+   - If someone asks if you're a bot, be honest but focus on how you can help
+   Use this business information only when relevant: ${JSON.stringify(businessInfo)}`;
 
- const completion = await openai.chat.completions.create({
-   model: "gpt-4o",
-   messages: [
-     { role: "system", content: systemPrompt },
-     { role: "user", content: userPrompt }
-   ],
-   max_tokens: 800,
-   temperature: 0.7
- });
+   console.log('Debug - Generated systemPrompt:', systemPrompt);
 
- return completion.choices[0].message.content;
+   const userPrompt = `Respond naturally to: "${userMessage}"
+   - Address the actual question or concern raised
+   - Don't repeat previous points
+   - Be direct and honest
+   - Keep responses concise
+   - If they're skeptical, acknowledge it and focus on being helpful`;
+
+   const completion = await openai.chat.completions.create({
+     model: "gpt-4",
+     messages: [
+       { role: "system", content: systemPrompt },
+       { role: "user", content: userPrompt }
+     ],
+     max_tokens: 800,
+     temperature: 0.7
+   });
+
+   return completion.choices[0].message.content;
+ } catch (error) {
+   console.error('Error in OpenAI call:', error);
+   throw error;
+ }
 }

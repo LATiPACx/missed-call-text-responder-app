@@ -3,6 +3,18 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import songSecureData from '../songsecure_data.json';
 
+function sortedStringify(obj) {
+ if (typeof obj !== 'object' || obj === null) {
+   return JSON.stringify(obj, null, 2);
+ }
+ 
+ const sortedObj = {};
+ Object.keys(obj).sort().forEach(key => {
+   sortedObj[key] = typeof obj[key] === 'object' ? sortedStringify(obj[key]) : obj[key];
+ });
+ return JSON.stringify(sortedObj, null, 2);
+}
+
 export default function BusinessAISettings({ businessName, businessId }) {
  const [info, setInfo] = useState('');
  
@@ -17,11 +29,11 @@ export default function BusinessAISettings({ businessName, businessId }) {
        const docSnap = await getDoc(docRef);
        
        if (docSnap.exists()) {
-         setInfo(JSON.stringify(docSnap.data().businessData, null, 2));
+         setInfo(sortedStringify(docSnap.data().businessData));
        } else {
          // Initialize with default data for SongSecure
          if (businessName === 'SongSecure') {
-           setInfo(JSON.stringify(songSecureData, null, 2));
+           setInfo(sortedStringify(songSecureData));
          }
        }
      } catch (error) {
